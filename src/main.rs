@@ -7,29 +7,30 @@ use hmac::Hmac;
 use http::method;
 use openssl::{hash, pkcs5::pbkdf2_hmac};
 use reqwest::Client;
-use std::{borrow::Borrow, collections::{HashMap, VecDeque}};
+use std::{borrow::Borrow, collections::{HashMap, VecDeque}, default, ops::Index};
 use std::{fs::File, usize};
 // use sha::{Sha1, sha1};
 use std::str::from_utf8;
 // use hmac::{Hmac, Mac, NewMac};
 use chrono::Utc;
-use crypto::{digest::Digest, hmac, mac::Mac, sha1, md5};
-use hyper::{Request, http};
+use crypto::{digest::Digest, hmac, mac::Mac, md5, sha1};
+use hyper::{Request, header::Keys, http};
+use log::{info}
 
 
+#[derive(Default,Debug)]
 struct UpYunConfig {
     Bucket: String,
-
     Operator: String,
     Password: String,
     Secret: String,
     Hosts: HashMap<String, String>,
     UserAgent: String,
 }
-
+#[derive(Default,Debug)]
 struct UpYun {
     UpYunConfig: UpYunConfig,
-    httpc: Client,
+    httpc: String,
     deprecated: bool,
 }
 
@@ -50,6 +51,42 @@ struct RestAuthConfig {
     uri: String,
     DateStr: String,
     LengthStr: String,
+}
+
+#[derive(Default,Debug)]
+struct PutObjectConfig {
+    path: String,
+    local_path: String,
+    reader: Vec<u8>,
+    headers: HashMap<String,String>,
+    use_md5: bool,
+    user_resume_upload: bool,
+    resume_partsize: i64,
+    max_resume_put_tries: i32,
+}
+
+
+impl  PutObjectConfig {
+    fn new() -> Self{
+        PutObjectConfig{
+            ..Default::default()
+        }
+    }
+
+    fn build(self) -> Self{
+        self
+    }
+
+
+    fn set_path(mut self, path: String) -> Self{
+       self.path = path;
+       self
+    }
+
+    fn set_local_path(mut self, local_path: String) -> Self{
+        self.local_path = local_path;
+        self
+    }
 }
 
 impl RestReqConfig {
@@ -94,7 +131,79 @@ impl RestReqConfig {
     }
 }
 
+impl UpYunConfig {
+    fn new(Bucket: String, Operator: String, Password: String) -> Self{
+        UpYunConfig{
+            Bucket:Bucket,
+            Operator:Operator,
+            Password: Password,
+            ..Default::default()
+        }
+    }
+
+    fn build(mut self) -> Self {
+        self
+    }
+}
+
+
 impl UpYun {
+    fn new(config: UpYunConfig) -> Self{
+        // init upyunconfig
+        UpYun{
+            UpYunConfig: config,
+            ..Default::default()
+        }
+    }
+
+    fn set_httpc(mut self) -> Self{
+        self.httpc = "".to_string();
+        self
+    }
+
+    fn set_deprecated(mut self) -> Self{
+        self.deprecated = true;
+        self
+    }
+
+    fn build(self) -> Self{
+        self
+    }
+
+
+    // func (up *UpYun) Put(config *PutObjectConfig) (err error) {
+    //     if config.LocalPath != "" {
+    //         var fd *os.File
+    //         if fd, err = os.Open(config.LocalPath); err != nil {
+    //             return errorOperation("open file", err)
+    //         }
+    //         defer fd.Close()
+    //         config.Reader = fd
+    //     }
+    
+    //     if config.UseResumeUpload { // 是否在用断点续传
+    //         logrus.Info("up.resumePut")
+    //         return up.resumePut(config)
+    //     } else {
+    //         logrus.Info("up.put") // 正常上传
+    //         return up.put(config)
+    //     }
+    // }
+
+    fn Put(&mut self, config: PutObjectConfig){
+        if config.local_path != ""{
+            // file
+        }
+        
+        if config.user_resume_upload{
+            // 断电续传
+            info!("断电续传尚未完成")
+        } else {
+            info!("正常上传")
+        }
+    }
+
+
     fn put_file(
         &mut self,
         file_path: String,
@@ -123,11 +232,19 @@ impl UpYun {
 
     /// FIXME
     fn doHTTPRequest(&mut self,method: hyper::Method, url:String, headers: HashMap<String,String>, body: Vec<u8>){
-        let rep = hyper::Request::builder()
-            .method(method)
-            .uri(url)
-            .body(body)
-            .unwrap();
+        match  hyper::Request::builder().method(method).uri(url).body(body){
+            Ok(req) => {
+                for (key,value) in headers{
+                    if key.to_lowercase() == "host"{
+                        // req.
+                    } else {
+                    }
+                }
+            },
+            Err(e) => {
+                println!("{:?}",e)
+            }
+        }
     }
 
     fn MakeRESTAuth(&mut self,config: RestAuthConfig) -> String{
@@ -357,7 +474,7 @@ fn makeRFC1123Date() -> String {
 #[cfg(test)]
 mod tests {
     use chrono::{Date, DateTime, Utc};
-    use openssl::hash;
+    use hyper::http;
     use std::{collections::HashMap, io::Read};
 
     use crate::escapeUri;
@@ -471,15 +588,48 @@ mod tests {
         println!("{:?}", xx);
     }
 
+    // using hyper
     #[test]
-    fn 
+    fn hyper_test(){
+        let method = http::Method::GET;
+        let url = "http://www.baidu.com";
+        let headers: HashMap<String, String> = HashMap::new();
+        let body = [0u8;32];
+        match hyper::Request::builder().method(method).uri(url).body(body){
+            Ok(req) => {
+                for (key,value) in headers{
+                    println!("{:?}{:?}",&key, &value);
+                    if key.to_lowercase() == "host"{
+                        // req.
+                    } else {
+                        println!("{:?}", req.headers())
+
+                    }
+                }
+            },
+            Err(e) => {
+                println!("{:?}",e)
+            }
+        }
+    }
+
 }
 
 fn main() {
-    escapeUri("xx".to_string());
-    println!("Hello, world!");
-    unhex(1);
-    let rqc = RestReqConfig::new()
-        .set_uri("/xx/中文.log".to_string())
-        .build();
+    let BUCKET = "sdk-test".to_string();
+    let CNAME = "sdk-test.b0-aicdn.com".to_string();
+    let USER = "sdk".to_string();
+    let PASSWORD = "IwwEqRmUgs29IdNOzDT3ePFz7Q9iMT5m".to_string();
+    //
+    let up = UpYun::new(UpYunConfig::new(BUCKET, USER, PASSWORD).build()).build();
+    let put_object_config = PutObjectConfig::new().set_local_path("".to_string()).set_path("/xx/中文.log".to_string()).build();
+    
+    println!("{:?}",up);
+
+
+
+
+    // let rqc = RestReqConfig::new()
+    //     .set_uri("/xx/中文.log".to_string())
+    //     .build();
 }
